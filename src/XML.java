@@ -91,10 +91,10 @@ public class XML extends Terminal {
 				 for(WirelessTag wTag : tags){
 					 Tag tag = wTag.getTag();
 					 if(isTagExist(tag.mac())){
-						 setState(tag.mac(), ATTRIBUTES, tag.apIP(),tag.code_1(),tag.code_2(),tag.signal(),tag.model(),tag.on(),"online",wTag.getCommuncation(),!tag.error(),tag.battary());
+						 setState(tag.mac(), ATTRIBUTES, tag.apIP(),tag.code_1(),tag.code_2(),tag.signal(),tag.model(),tag.on(),"online",wTag.getCommuncation(),tag.error(),tag.battary());
 					 } else {
 						 addTag(tag.mac());
-						 setState(tag.mac(), ATTRIBUTES, tag.apIP(),tag.code_1(),tag.code_2(),tag.signal(),tag.model(),tag.on(),"online",wTag.getCommuncation(),!tag.error(),tag.battary());
+						 setState(tag.mac(), ATTRIBUTES, tag.apIP(),tag.code_1(),tag.code_2(),tag.signal(),tag.model(),tag.on(),"online",wTag.getCommuncation(),tag.error(),tag.battary());
 					 }
 				 }
 			 }
@@ -169,11 +169,11 @@ public class XML extends Terminal {
 					Element attrTag = element.getChild(attrs[x]);
 					if (attrTag == null) {
 						attrTag = new Element(attrs[x]);
-						attrTag.setText(values[x].toString());
+						fixStateText(attrTag, attrs[x], values[x]);
 						element.addContent(attrTag);
 					} else {
 						try {
-							attrTag.setText(values[x].toString());
+							fixStateText(attrTag, attrs[x], values[x]);
 						} catch (NullPointerException e1e) {
 							System.out.println("e1:" + attrTag + " value:" + values[x]);
 						}
@@ -183,4 +183,26 @@ public class XML extends Terminal {
 		}
 		
 	}
+
+	private void fixStateText(Element attrTag, String attrs, Object value) {
+		if(attrs.equals(HARDWARE)){
+			if((boolean)value){
+				attrTag.setText("error");
+			}else{
+				attrTag.setText("ok");
+			}
+		} else if (attrs.equals(SWITCH)){
+			if((boolean)value){
+				attrTag.setText("on");
+			}else{
+				attrTag.setText("off");
+			}
+			
+		} else {
+			attrTag.setText(value.toString());
+		}
+		
+	}
+
+	
 }

@@ -3,23 +3,26 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.BindException;
 import java.net.HttpURLConnection;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.Enumeration;
 import java.util.Random;
 import java.util.Set;
 
@@ -37,7 +40,7 @@ import com.sio.plugin.Terminal;
 
 public class TCPServer_7070 extends Terminal {
 	private static final int PORT = 7070;
-	private static final File prop_file = new File("./tcp.ini");
+	private static final File PROP_FILE = new File("./config/tcp.ini");
 	private static final int BUFFER_DEFAULT_SIZE = 1024;
 	private static final int HTTP_CONNECTION_TIME_OUT = 2;
 	private static final String COMMAND_HEAD_SEND = "ESLSend";
@@ -56,51 +59,40 @@ public class TCPServer_7070 extends Terminal {
 	
 	@Override
 	public void start() {
-		if(!prop_file.exists()){
-			try {
-				prop_file.createNewFile();
+		String mac = null;
+		if(PROP_FILE.exists()){
+			try(FileReader reader = new FileReader(PROP_FILE);
+					BufferedReader in = new BufferedReader(reader);){
+				mac = in.readLine();
+			} catch (FileNotFoundException e) {
+				e.printStackTrace();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			try(FileWriter writer = new FileWriter(prop_file)){
-				try {
-					writer.write(InetAddress.getLocalHost().getHostAddress());
-				} catch (UnknownHostException e) {
-					e.printStackTrace();
-				}
-			} catch (IOException e1) {
-				e1.printStackTrace();
-			}
 		}
-		String ip = null;
-		try(FileReader reader = new FileReader(prop_file);
-				BufferedReader in = new BufferedReader(reader);){
-			ip = in.readLine();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		
 		try {
 			serverchannel = ServerSocketChannel.open();
 			serverchannel.configureBlocking(false);
-			if(ip == null){
+			if(mac == null){
 				serverchannel.bind(new InetSocketAddress(InetAddress.getLocalHost().getHostAddress(),PORT));
 			} else {
-				serverchannel.bind(new InetSocketAddress(ip,PORT));
+				serverchannel.bind(new InetSocketAddress(getInet4AddressByHardwareAddress(mac),PORT));
 			}
-			
+
+		} catch(BindException e){
+			System.out.println("异常 -> TCP 7070 端口被占用");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
+
 		try {
 			serverSelector = Selector.open();
 			socketSelector = Selector.open();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
+
 		try {
 			serverchannel.register(serverSelector, SelectionKey.OP_ACCEPT);
 		} catch (ClosedChannelException e) {
@@ -122,7 +114,7 @@ public class TCPServer_7070 extends Terminal {
 						if(key.isAcceptable()){
 							socketChannel = sChannel.accept();
 							socketChannel.configureBlocking(false);
-							System.out.println("连接进来1个终端");
+							System.out.println("发生连接-[tcp7070]");
 							socketChannel.register(socketSelector, SelectionKey.OP_READ);
 						} 
 						keys.remove(key);
@@ -181,11 +173,14 @@ public class TCPServer_7070 extends Terminal {
 	private void disconnect(){
 		if(socketChannel != null){
 			try {
+				socketChannel.shutdownInput();
+				socketChannel.shutdownOutput();
 				socketChannel.socket().close();
 				socketChannel.close();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
+			System.out.println("切断连接-[tcp7070]");
 			socketChannel = null;
 		}
 	}
@@ -225,9 +220,11 @@ public class TCPServer_7070 extends Terminal {
 	private void solveCommand(String mac, BufferedImage image) throws IOException{
 		if(image == null){
 			sendwarn(FAILD);
+			return;
 		}
 		if(mac == null || mac.length() != 12){
 			sendwarn(FAILD_2);
+			return;
 		}
 		Set<AbstractAccessPoint> aps = getDevices();
 		for(AbstractAccessPoint ap : aps){
@@ -257,5 +254,29 @@ public class TCPServer_7070 extends Terminal {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+	
+	private InetAddress getInet4AddressByHardwareAddress(String hardware_address){
+		Enumeration<NetworkInterface> interfaces = null;
+		try {
+			interfaces = NetworkInterface.getNetworkInterfaces();
+			while (interfaces.hasMoreElements()){
+				NetworkInterface netInterface = interfaces.nextElement();
+				if(netInterface.getHardwareAddress() != null)
+				if(Packer.fromBytesTo16radix(netInterface.getHardwareAddress()).equalsIgnoreCase(hardware_address)){
+					Enumeration<InetAddress> inets = netInterface.getInetAddresses();
+					while(inets.hasMoreElements()) {
+						InetAddress addr = inets.nextElement();
+						if(addr instanceof Inet4Address){
+							return addr;
+						}
+					}
+					return null;
+				}
+			}
+		} catch (SocketException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 }
